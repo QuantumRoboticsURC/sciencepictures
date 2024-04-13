@@ -10,6 +10,7 @@ import pyzed.sl as sl
 import cv2
 import numpy as np
 import math
+import os
 
 def euler_from_quaternion(x, y, z, w):
 	t0 = +2.0 * (w * x + y * z)
@@ -34,9 +35,12 @@ class Science_image(Node):
 		self.ant_cam_publisher = self.create_publisher(Image, "/ant_cam", 10)
 		self.create_subscription(Int8, "image_quality", self.quality_callback, 1)
 		self.quality = 18
+		self.state = -1
+		self.angle = 0.0
 		self.bridge = CvBridge()
 		self.state_pub = self.create_publisher(Int8, "state", 1)
 		self.create_subscription(Int8, "state", self.update_state, 1, callback_group=listener_group)
+		self.rover_angle = self.create_subscription(Imu, "/bno055/imu", self.update_angle, 10,callback_group=listener_group)
 
 		self.zed = sl.Camera()
 		self.init_params = sl.InitParameters()
@@ -56,31 +60,31 @@ class Science_image(Node):
 		self.arm_camera = self.initialize_camera()
 		self.antenna_camera = self.initialize_camera()
 
-		def quality_callback(self, msg):
-			self.quality = msg.data
-  
-		def initialize_camera(self):
-			num_cameras = 5  # Rango de posibles indices generados
-			for index in range(num_cameras):
-				camera = cv2.VideoCapture(index)
-				if camera.isOpened():
-					self.get_logger().info(f"Cámara encontrada en el índice {index}")
-					return camera
-				camera.release()
-			self.get_logger().error("No se encontraron cámaras disponibles.")
-			return None
-		
-		def cv2_to_imgmsg(self, image):
-			msg = self.bridge.cv2_to_imgmsg(image, encoding = "bgr8")
-			return msg
+	def quality_callback(self, msg):
+		self.quality = msg.data
 
-		def cv2_to_imgmsg_resized(self, image, scale_percent):
-			width = int(image.shape[1] * scale_percent / 100)
-			height = int(image.shape[0] * scale_percent / 100)
-			dim = (width, height)
-			resized_image = cv2.resize(image, dim, interpolation = cv2.INTER_AREA)
-			msg = self.bridge.cv2_to_imgmsg(resized_image, encoding = "bgr8")
-			return msg
+	def initialize_camera(self):
+		num_cameras = 5  # Rango de posibles indices generados
+		for index in range(num_cameras):
+			camera = cv2.VideoCapture(index)
+			if camera.isOpened():
+				self.get_logger().info(f"Cámara encontrada en el índice {index}")
+				return camera
+			camera.release()
+		self.get_logger().error("No se encontraron cámaras disponibles.")
+		return None
+	
+	def cv2_to_imgmsg(self, image):
+		msg = self.bridge.cv2_to_imgmsg(image, encoding = "bgra8")
+		return msg
+
+	def cv2_to_imgmsg_resized(self, image, scale_percent):
+		width = int(image.shape[1] * scale_percent / 100)
+		height = int(image.shape[0] * scale_percent / 100)
+		dim = (width, height)
+		resized_image = cv2.resize(image, dim, interpolation = cv2.INTER_AREA)
+		msg = self.bridge.cv2_to_imgmsg(resized_image, encoding = "bgra8")
+		return msg
 
 	def update_state(self, msg):
 		self.state = msg.data
@@ -110,10 +114,11 @@ class Science_image(Node):
 
 				imu=self.angle
 				img = image_ocv
-				brujula = cv2.imread('Brujula.jpeg')
-				escala = cv2.imread('escala.jpeg')
+				brujula = cv2.imread("/home/shikur_orin/ros2_ws/src/sciencepictures/sciencepictures/sciencepictures/Brujula.jpeg")
+				escala = cv2.imread("/home/shikur_orin/ros2_ws/src/sciencepictures/sciencepictures/sciencepictures/escala.jpeg")
 				filas, columnas,canales = img.shape
 				tam=int(filas/3)
+				print(brujula.shape)
 				brujula2 = cv2.resize(brujula, (tam,tam))
 				escala2= cv2.resize(escala,(int(columnas/4),int(filas/32)))
 				filas, columnas,canales = brujula2.shape
@@ -138,6 +143,7 @@ class Science_image(Node):
 
 				cv2.imwrite('Grises.png',img)
 				cv2.imwrite('copia_sobel.png', sobel_combined)
+				self.publisher_.publish(self.cv2_to_imgmsg(img))
 
 		elif self.state == 9:
 			if self.arm_camera:

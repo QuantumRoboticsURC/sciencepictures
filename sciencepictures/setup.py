@@ -19,7 +19,8 @@ setup(
     license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
-        'console_scripts': ['science_pictures=sciencepictures.science_image:main'
+        'console_scripts': ['science_pictures=sciencepictures.science_image:main',
+                            'picture=sciencepictures.take_picture:main'
         ],
     },
 )

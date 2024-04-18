@@ -4,7 +4,7 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 from geometry_msgs.msg import Quaternion
 from std_msgs.msg import Int8
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image,Imu
 from cv_bridge import CvBridge
 import pyzed.sl as sl
 import cv2
@@ -40,7 +40,7 @@ class Science_image(Node):
 		self.bridge = CvBridge()
 		self.state_pub = self.create_publisher(Int8, "state", 1)
 		self.create_subscription(Int8, "state", self.update_state, 1, callback_group=listener_group)
-		self.rover_angle = self.create_subscription(Imu, "/bno055/imu", self.update_angle, 10,callback_group=listener_group)
+		self.create_subscription(Imu, "/bno055/imu", self.update_angle, 10,callback_group=listener_group)
 
 		self.zed = sl.Camera()
 		self.init_params = sl.InitParameters()
@@ -95,6 +95,7 @@ class Science_image(Node):
 		quat = msg.orientation
 		angle_x,angle_y,angle_z = euler_from_quaternion(quat.x,quat.y,quat.z,quat.w)
 		self.angle = ((angle_z+2*math.pi)%(2*math.pi))*(180/math.pi)
+		print(f"Update angle", self.angle)
 		
 	def imagen(self):
 		if self.state == 8:
@@ -113,37 +114,39 @@ class Science_image(Node):
 				sobel_combined = cv2.addWeighted(sobel_x, 0.5, sobel_y, 0.5, 0)
 
 				imu=self.angle
+				print(f"Timer", self.angle)
 				img = image_ocv
 				brujula = cv2.imread("/home/shikur_orin/ros2_ws/src/sciencepictures/sciencepictures/sciencepictures/Brujula.jpeg")
 				escala = cv2.imread("/home/shikur_orin/ros2_ws/src/sciencepictures/sciencepictures/sciencepictures/escala.jpeg")
 				filas, columnas,canales = img.shape
 				tam=int(filas/3)
-				print(brujula.shape)
 				brujula2 = cv2.resize(brujula, (tam,tam))
 				escala2= cv2.resize(escala,(int(columnas/4),int(filas/32)))
 				filas, columnas,canales = brujula2.shape
 				roi = img[0:filas,0:columnas]
 				brujula_gris = cv2.cvtColor(brujula2,cv2.COLOR_BGR2GRAY)
-				ret,brujula_byn =cv2.threshold(brujula_gris,190,255,cv2.THRESH_BINARY)
+				ret, brujula_byn =cv2.threshold(brujula_gris,190,255,cv2.THRESH_BINARY)
 				brujula3 = cv2.bitwise_not(brujula_byn)
 				M = cv2.getRotationMatrix2D((columnas//2,filas//2),imu-90,1)
 				brujula4 = cv2.warpAffine(brujula3,M,(columnas,filas))
 				brujulafin=cv2.bitwise_not(brujula4)
-					
+
 				img_fondo=cv2.bitwise_and(roi, roi, mask = brujulafin)
 				img[0:filas,0:columnas] = img_fondo
 
 				filas, columnas,canales = img.shape
-				filas2, columnas2,canales = escala2.shape
+				filas2, columnas2,canales2 = escala2.shape
 				escala3 = cv2.cvtColor(escala2,cv2.COLOR_BGR2GRAY)
-				ret,escala4 =cv2.threshold(escala3,190,255,cv2.THRESH_BINARY)
+				ret, escala4 =cv2.threshold(escala3,190,255,cv2.THRESH_BINARY)
 				roi2 = img[filas-filas2-20:filas-20,columnas-columnas2-20:columnas-20]
 				img_fondo2=cv2.bitwise_and(roi2, roi2, mask = escala4)
 				img[filas-filas2-20:filas-20,columnas-columnas2-20:columnas-20]=img_fondo2
 
 				cv2.imwrite('Grises.png',img)
 				cv2.imwrite('copia_sobel.png', sobel_combined)
+
 				self.publisher_.publish(self.cv2_to_imgmsg(img))
+				filas, columnas,canales = brujula2.shape			
 
 		elif self.state == 9:
 			if self.arm_camera:

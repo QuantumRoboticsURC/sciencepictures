@@ -6,6 +6,9 @@ from geometry_msgs.msg import Quaternion
 from std_msgs.msg import Int8
 from sensor_msgs.msg import Image,Imu
 from cv_bridge import CvBridge
+from ublox_ubx_msgs.msg import UBXNavHPPosLLH
+from rclpy.qos import *
+
 import pyzed.sl as sl
 import cv2
 import numpy as np
@@ -41,6 +44,11 @@ class Science_image(Node):
 		self.state_pub = self.create_publisher(Int8, "state", 1)
 		self.create_subscription(Int8, "state", self.update_state, 1, callback_group=listener_group)
 		self.create_subscription(Imu, "/bno055/imu", self.update_angle, 10,callback_group=listener_group)
+		self.create_subscription(UBXNavHPPosLLH,'/gps_base/ubx_nav_hp_pos_llh',self.callback,qos_profile_sensor_data)
+		self.create_subscription(Int8,"key_pressed",self.pressed,1)
+		self.key = -1
+		self.gps_coordinates = [0.0,0.0]
+		#self.timer_coords = self.create_timer(0.0001,self.start_listener)
 
 		self.zed = sl.Camera()
 		self.init_params = sl.InitParameters()
@@ -54,14 +62,41 @@ class Science_image(Node):
 
 		self.runtime_parameters = sl.RuntimeParameters()
 		self.image = sl.Mat()
+		self.other_condition = False
 
 		self.timer = self.create_timer(0.0001, self.imagen, callback_group=timer_group)
 		# Inicializar cámaras
-		self.arm_camera = self.initialize_camera()
-		self.antenna_camera = self.initialize_camera()
+		#self.arm_camera = self.initialize_camera()
+		#self.antenna_camera = self.initialize_camera()
+		
+		# Inicializar variables para el cálculo de la escala
+		self.camera_to_rover_distance = 0.5  # Distancia de la cámara al borde central del robot (en metros)
+		self.width = 0.84  # Ancho del robot (en metros)
+		self.start_angle = math.atan2((self.width/2), self.camera_to_rover_distance)
+		self.pixels = 680 # Ancho de la imagen en píxeles
 
+		self.coordinate_1 = None
+		self.coordinate_2 = None
+
+	def pressed(self,msg):
+		self.key = msg.data
+		if self.key == 0:
+			print("------------------------------------------------------")
+			self.coordinate_1 = self.gps_coordinates
+			print(self.coordinate_1)
+		elif self.key == 1:
+			print("------------------------------------------------------")
+			self.coordinate_2 = self.gps_coordinates
+			print(self.coordinate_2) 
+	
 	def quality_callback(self, msg):
 		self.quality = msg.data
+
+	def callback(self, data):
+		self.gps_coordinates[0]=data.lat/(10000000)
+		self.gps_coordinates[1]=data.lon/(10000000)
+		#print("En el callback")    
+		
 
 	def initialize_camera(self):
 		num_cameras = 5  # Rango de posibles indices generados
@@ -88,15 +123,38 @@ class Science_image(Node):
 
 	def update_state(self, msg):
 		self.state = msg.data
-		print(msg.data)
+		#print(msg.data)
 	
 	def update_angle(self,msg):
 		quat = Quaternion()
 		quat = msg.orientation
 		angle_x,angle_y,angle_z = euler_from_quaternion(quat.x,quat.y,quat.z,quat.w)
 		self.angle = ((angle_z+2*math.pi)%(2*math.pi))*(180/math.pi)
-		print(f"Update angle", self.angle)
+		#print(f"Update angle", self.angle)
+
+	def distanceBetweenCoords(self,current_lat,current_long,target_lat,target_long):
+		earth_radius = 6371000
+		dLat = np.deg2rad(target_lat-current_lat)
+		dLon = np.deg2rad(target_long-current_long)
+		current_lat=np.deg2rad(current_lat)
+		target_lat=np.deg2rad(target_lat)
 		
+		a = np.sin(dLat/2)*np.sin(dLat/2)+np.sin(dLon/2)*np.sin(dLon/2)*np.cos(current_lat)*np.cos(target_lat)
+
+		c = 2*np.arctan2(np.sqrt(a),np.sqrt(1-a))
+		return earth_radius*c
+		
+	def calculate_scale(self):
+		# Obtener la nueva distancia
+		if(self.coordinate_1 and self.coordinate_2):
+			new_distance = self.distanceBetweenCoords(self.coordinate_1[0],self.coordinate_1[1],self.coordinate_2[0],self.coordinate_2[1])
+			print("Distancia ",new_distance)
+			if new_distance <1:
+				return 1
+			scale = (((self.pixels / 2) * self.camera_to_rover_distance) / ((self.width / 2) * new_distance))
+			return scale
+		return None
+
 	def imagen(self):
 		if self.state == 8:
 			if self.zed.grab(self.runtime_parameters) == sl.ERROR_CODE.SUCCESS:
@@ -142,10 +200,19 @@ class Science_image(Node):
 				img_fondo2=cv2.bitwise_and(roi2, roi2, mask = escala4)
 				img[filas-filas2-20:filas-20,columnas-columnas2-20:columnas-20]=img_fondo2
 
+				# Mostrar la escala en la imagen
+				scale = self.calculate_scale()
+				scale_text = f"Scale: {scale} m/px"
+				print(scale)
+				cv2.putText(img, scale_text, (20, filas - 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+
 				cv2.imwrite('Grises.png',img)
 				cv2.imwrite('copia_sobel.png', sobel_combined)
 
 				self.publisher_.publish(self.cv2_to_imgmsg(img))
+				if(self.other_condition):
+					cv2.imwrite('nueva.png', img)
+				print("se supone xd")
 				filas, columnas,canales = brujula2.shape			
 
 		elif self.state == 9:

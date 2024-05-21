@@ -20,7 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': ['science_pictures=sciencepictures.science_image:main',
-                            'picture=sciencepictures.take_picture:main','prueba=sciencepictures.science_image_prueba:main'
+                            'picture=sciencepictures.take_picture:main','prueba=sciencepictures.science_image_pruebas:main'
         ],
     },
 )

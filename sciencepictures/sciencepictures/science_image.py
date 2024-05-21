@@ -210,7 +210,7 @@ class Science_image(Node):
 				cv2.imwrite('copia_sobel.png', sobel_combined)
 
 				self.publisher_.publish(self.cv2_to_imgmsg(img))
-				if(self.other_condition):
+				if(self.pressed==2):
 					cv2.imwrite('nueva.png', img)
 				print("se supone xd")
 				filas, columnas,canales = brujula2.shape			

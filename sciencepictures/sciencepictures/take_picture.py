@@ -60,6 +60,10 @@ class PictureTaker(Node):
             data = Int8()
             data.data = 1
             self.pressed.publish(data)
+        elif k=="p":
+            data = Int8()
+            data.data = 2
+            self.pressed.publish(data)
 
 def main(args=None):
 	rclpy.init(args=args)

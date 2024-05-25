@@ -77,6 +77,7 @@ class Science_image(Node):
 
 		self.coordinate_1 = None
 		self.coordinate_2 = None
+		self.picture_save = False
 
 	def pressed(self,msg):
 		self.key = msg.data
@@ -88,6 +89,8 @@ class Science_image(Node):
 			print("------------------------------------------------------")
 			self.coordinate_2 = self.gps_coordinates
 			print(self.coordinate_2) 
+		elif self.key == 2:
+			self.picture_save = True
 	
 	def quality_callback(self, msg):
 		self.quality = msg.data
@@ -199,14 +202,16 @@ class Science_image(Node):
 		scale_text = f"Scale: {scale} m/px"
 		print(scale)
 		cv2.putText(img, scale_text, (20, filas - 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
-
-		cv2.imwrite('Grises.png',img)
-		cv2.imwrite('copia_sobel.png', sobel_combined)
+		
+		if(self.picture_save):
+			cv2.imwrite('Grises.png',img)
+			cv2.imwrite('copia_sobel.png', sobel_combined)
+			self.picture_save=False
 
 		self.publisher_.publish(self.cv2_to_imgmsg(img))
 		if(self.pressed==2):
 			cv2.imwrite('nueva.png', img)
-		print("se supone xd")
+		
 		filas, columnas,canales = brujula2.shape
 
 	def imagen(self):
